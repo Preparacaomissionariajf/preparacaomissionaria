@@ -29,7 +29,7 @@
     const members = g.group ? S.guests.filter(x => x.group === g.group) : [g];
     $('#step1').classList.add('hidden');
     const s2 = $('#step2'); s2.classList.remove('hidden');
-    const saved = JSON.parse(localStorage.getItem('rsvp:' + (g.group || g.name)) || 'null');
+    let saved = null; try { saved = JSON.parse(localStorage.getItem('rsvp:' + (g.group || g.name)) || 'null'); } catch (_) {}
     s2.innerHTML = `<p class="eyebrow" style="text-align:center">olá, ${g.name.split(' ')[0]}</p>
       <h2 class="script" style="text-align:center;font-size:2.6rem">Você vem?</h2><div class="divider">${HEART}</div>
       <form id="f" novalidate>${members.map((m, i) => `<div class="person"><h4>${m.name}</h4>${eventsOf(m).map(id => {
@@ -49,7 +49,7 @@
         const r = document.querySelector(`input[name="m${i}-${id}"]:checked`); return [id, r ? r.value === '1' : null]; })) }));
       if (answers.some(a => Object.values(a.events).includes(null))) { const er = $('#err'); er.textContent = 'Responda “Vou” ou “Não vou” para cada item, por favor ♡'; er.classList.remove('hidden'); return; }
       const payload = { guest: g.name, answers, message: $('#msg').value.trim(), at: new Date().toISOString() };
-      localStorage.setItem('rsvp:' + (g.group || g.name), JSON.stringify(payload));
+      try { localStorage.setItem('rsvp:' + (g.group || g.name), JSON.stringify(payload)); } catch (_) {}
       $('#send').disabled = true; $('#send').textContent = 'Enviando…';
       let ok = false;
       if (S.rsvpEndpoint) { try { ok = (await fetch(S.rsvpEndpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(payload) })).ok; } catch (_) {} }

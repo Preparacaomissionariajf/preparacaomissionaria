@@ -39,7 +39,8 @@
     <button class="btn enter" id="enter">Entrar no site</button>`;
   watchImages(intro);
 
-  if (sessionStorage.getItem('introSeen')) { intro.remove(); document.body.classList.remove('lock'); }
+  let seen = false; try { seen = !!sessionStorage.getItem('introSeen'); } catch (_) {}
+  if (seen) { intro.remove(); document.body.classList.remove('lock'); }
   else {
     const env = $('#env'), env3d = $('#env3d');
     let angle = 0, opened = false;
@@ -73,7 +74,7 @@
       setTimeout(() => intro.classList.add('fanned'), 1400);
     }
     $('#enter').addEventListener('click', () => {
-      sessionStorage.setItem('introSeen', '1');
+      try { sessionStorage.setItem('introSeen', '1'); } catch (_) {}
       intro.classList.add('gone'); document.body.classList.remove('lock');
       setTimeout(() => intro.remove(), 1100);
     });
