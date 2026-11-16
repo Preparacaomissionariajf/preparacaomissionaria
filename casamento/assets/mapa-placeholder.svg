@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700">
+<defs>
+<filter id="w"><feTurbulence type="fractalNoise" baseFrequency=".012" numOctaves="3" seed="8"/><feDisplacementMap in="SourceGraphic" scale="30"/></filter>
+<filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .4  0 0 0 0 .3  0 0 0 .08 0"/></filter>
+</defs>
+<rect width="1000" height="700" fill="#f4e8d6"/>
+<g filter="url(#w)" opacity=".75">
+<ellipse cx="220" cy="190" rx="200" ry="120" fill="#cfd8b5"/>
+<ellipse cx="760" cy="150" rx="190" ry="110" fill="#d9e3d0"/>
+<ellipse cx="520" cy="420" rx="260" ry="140" fill="#e9cfc0"/>
+<ellipse cx="200" cy="560" rx="180" ry="90" fill="#dbe5ea"/>
+<ellipse cx="800" cy="560" rx="200" ry="100" fill="#cfd8b5"/>
+</g>
+<path d="M120 170 C300 90 330 300 480 250 S700 120 820 230 700 470 640 520 330 600 200 540" fill="none" stroke="#b45f77" stroke-width="4" stroke-dasharray="3 14" stroke-linecap="round" opacity=".75"/>
+<g font-size="46" text-anchor="middle">
+<text x="120" y="190">🏠</text><text x="480" y="270">☕</text><text x="820" y="250">💌</text><text x="640" y="540">💍</text><text x="200" y="560">⛪</text>
+</g>
+<text x="500" y="660" text-anchor="middle" font-family="serif" font-style="italic" font-size="28" fill="#8a7a63">(mapa provisório — troque por assets/mapa.jpg)</text>
+<rect width="1000" height="700" filter="url(#n)"/>
+</svg>
