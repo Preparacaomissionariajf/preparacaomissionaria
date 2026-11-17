@@ -12,19 +12,8 @@
   const intro = $('#intro');
   const items = `
     <article class="item note" aria-label="Bilhete">${S.note.map(p => `<p>${p}</p>`).join('')}</article>
-    <article class="item photo" aria-label="Foto">
-      <div class="shot"><div class="imgbox" data-label="foto de vocês"><img src="${S.photo.src}" alt="" data-fb></div><span class="stamp">${S.photo.stamp}</span></div>
-      <div class="cap">${S.photo.caption}</div>
-    </article>
-    <article class="item invite" aria-label="Convite">
-      <span class="fl fl-tl"></span><span class="fl fl-br"></span>
-      <p class="eyebrow">com muito amor</p>
-      <p class="names">${S.couple.a}<em>&amp;</em>${S.couple.b}</p>
-      <p class="line">${S.invite.line}</p>
-      <p class="when">${S.invite.when}</p>
-      <p class="where">${S.invite.where}</p>
-      <p class="sc">${S.invite.script}</p>
-    </article>`;
+    <article class="item photo" aria-label="Foto"><div class="imgbox" data-label="foto"><img src="${S.photo.src}" alt="Fotos de Fernando e Larissa em Paris" data-fb></div></article>
+    <article class="item invite" aria-label="Convite"><div class="imgbox" data-label="convite"><img src="${S.invite.src}" alt="Convite de casamento" data-fb></div></article>`;
   const face = (withItems, cls) => `<div class="env-face ${cls}">
       <div class="env-body"></div>
       ${withItems ? `<div class="env-items">${items}</div>` : ''}
@@ -113,8 +102,8 @@
   });
   function chapter(i) {
     const n = S.story.chapters.length, c = S.story.chapters[i];
-    Modal.open(`${c.photo ? `<div class="chap-photo imgbox paper" data-label="${c.title}" style="aspect-ratio:4/3"><img src="${c.photo}" alt="" data-fb></div>` : ''}
-      <p class="eyebrow" style="text-align:center">capítulo ${i + 1} · ${c.date}</p>
+    Modal.open(`${c.photo ? `<div class="chap-photo imgbox" data-label="${c.title}"><img src="${c.photo}" alt="" data-fb></div>` : ''}
+      <p class="eyebrow" style="text-align:center">capítulo ${i + 1}${c.date ? ' · ' + c.date : ''}</p>
       <h3>${c.title}</h3><div class="divider">${HEART}</div><p>${c.text}</p>
       <div class="chapnav"><button class="btn ghost" id="pv">‹ anterior</button><button class="btn ghost" id="nx">próximo ›</button></div>`,
       sh => { $('#pv', sh).onclick = () => chapter((i - 1 + n) % n); $('#nx', sh).onclick = () => chapter((i + 1) % n); });
