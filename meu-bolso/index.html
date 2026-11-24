@@ -571,7 +571,7 @@ async function init() {
     C[name].sub((arr, fromCache) => {
       if (name === 'cfg') { data.cfg = arr.find(x => x.id === 'main') || {}; } else data[name] = arr;
       if (!fromCache) live[name] = true;
-      seedIfNeeded(); schedule();
+      seedIfNeeded(); maybeImportExtrato(); schedule();
     }, () => { live[name] = true; schedule(); });
   });
 }
@@ -930,6 +930,32 @@ $('#billForm').addEventListener('submit', async e => {
 
 function renderAll() {
   renderSelects(); renderHome(); renderPlans(); renderInvoices(); renderBills();
+}
+
+/* ---------- extrato do ano (arquivo extrato.json publicado junto com a página) ---------- */
+let importing = false, extratoTried = false;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function maybeImportExtrato() {
+  if (importing || extratoTried || data.cfg.extratoV1 || !(live.tx && live.cfg && live.plans && live.cats)) return;
+  importing = true; extratoTried = true;
+  let list;
+  try { const r = await fetch('extrato.json', { cache: 'no-store' }); if (!r.ok) throw new Error('sem arquivo'); list = await r.json(); }
+  catch (e) { importing = false; return; }
+  try {
+    const have = new Set(data.tx.map(t => t.id)), todo = list.filter(o => !have.has(o.id));
+    const seen = new Set();
+    for (const o of list) { const k = o.kind + '|' + o.cat; if (!seen.has(k)) { seen.add(k); await ensureCat(o.kind, o.cat); } }
+    toast('Importando seu extrato… 0/' + todo.length, null, 600000);
+    let tries = 0;
+    for (let i = 0; i < todo.length; i++) {
+      try { await C.tx.put(todo[i].id, stripId(todo[i])); tries = 0; }
+      catch (e) { if (tries++ < 6) { await sleep(1500); i--; continue; } throw e; }
+      if (i % 20 === 0) $('#toastMsg').textContent = 'Importando seu extrato… ' + i + '/' + todo.length;
+    }
+    await C.cfg.put('main', Object.assign({}, data.cfg, { extratoV1: true }));
+    toast('Extrato importado: ' + list.length + ' lançamentos de nov/2025 a nov/2026.', null, 12000);
+  } catch (e) { toast('A importação parou no meio. Recarregue a página para continuar de onde parou.', null, 12000); extratoTried = false; }
+  importing = false; schedule();
 }
 
 showTab(); renderAll(); init();
