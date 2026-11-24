@@ -122,6 +122,8 @@ function parse(text, ctx) {
     if (cut(re)) { planId = p.id; break; }
   }
 
+  let cur = null;
+  if (cut(/(?:€|\beuros?\b|\beur\b)/)) cur = 'EUR';
   let cents = 0;
   const calc = m => Math.round(((numPt(m[1]) * (m[2] ? 1000 : 1)) + (m[3] ? (+m[3]) / 100 : 0)) * 100);
   for (const re of [reA, reB, reC]) {
@@ -152,6 +154,6 @@ function parse(text, ctx) {
   else category = inferCategory(kind, store, ctx.cats);
 
   const date = new Date(); date.setDate(date.getDate() - back);
-  return { kind, cents, store, category, isNewCat, method, planId, inst, date };
+  return { kind, cents, store, category, isNewCat, method, planId, inst, date, cur };
 }
 /*PARSER-END*/

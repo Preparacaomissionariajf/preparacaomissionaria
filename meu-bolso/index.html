@@ -203,6 +203,7 @@ button{cursor:pointer}
         <button class="icon-btn" id="nextM" aria-label="Próximo mês"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
       </div>
       <div class="chips" id="filterChips" role="group" aria-label="Filtrar por plano"></div>
+      <div class="seg" id="curSeg" role="group" aria-label="Moeda" style="align-self:flex-start"><button type="button" data-c="BRL" aria-pressed="true">Reais (R$)</button><button type="button" data-c="EUR" aria-pressed="false">Euros (€)</button></div>
     </div>
 
     <div class="card">
@@ -301,7 +302,7 @@ button{cursor:pointer}
     </div>
     <div class="form">
       <div class="grid2">
-        <label>Valor (R$)<input type="text" id="shAmount" inputmode="decimal" placeholder="0,00"></label>
+        <label>Valor<input type="text" id="shAmount" inputmode="decimal" placeholder="0,00"></label>
         <label>Data e hora<input type="datetime-local" id="shDt"></label>
       </div>
       <label>Loja ou origem<input type="text" id="shStore" placeholder="Ex.: Padaria Dona Maria" maxlength="80"></label>
@@ -459,6 +460,8 @@ function parse(text, ctx) {
     if (cut(re)) { planId = p.id; break; }
   }
 
+  let cur = null;
+  if (cut(/(?:€|\beuros?\b|\beur\b)/)) cur = 'EUR';
   let cents = 0;
   const calc = m => Math.round(((numPt(m[1]) * (m[2] ? 1000 : 1)) + (m[3] ? (+m[3]) / 100 : 0)) * 100);
   for (const re of [reA, reB, reC]) {
@@ -489,7 +492,7 @@ function parse(text, ctx) {
   else category = inferCategory(kind, store, ctx.cats);
 
   const date = new Date(); date.setDate(date.getDate() - back);
-  return { kind, cents, store, category, isNewCat, method, planId, inst, date };
+  return { kind, cents, store, category, isNewCat, method, planId, inst, date, cur };
 }
 /*PARSER-END*/
 
@@ -499,7 +502,9 @@ const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-const money = c => BRL.format((c || 0) / 100);
+const EURF = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'EUR' });
+const money = (c, cur) => (cur === 'EUR' ? EURF : BRL).format((c || 0) / 100);
+const curOf = t => t.cur === 'EUR' ? 'EUR' : 'BRL';
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const pad = n => String(n).padStart(2, '0');
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -543,7 +548,7 @@ const use = n => (window.claude && window.claude.use) ? window.claude.use(n).cat
 const data = { tx: [], plans: [], cats: [], bills: [], cfg: {} };
 const live = { tx: false, plans: false, cats: false, bills: false, cfg: false };
 const C = {};
-const ui = { tab: 'inicio', month: (() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; })(), filter: 'all', chart: 'gasto', limit: 25, regPlan: null };
+const ui = { tab: 'inicio', month: (() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; })(), filter: 'all', cur: 'BRL', chart: 'gasto', limit: 25, regPlan: null };
 let raf = 0;
 const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderAll(); }); };
 const sortedPlans = () => data.plans.slice().sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.name).localeCompare(b.name));
@@ -609,12 +614,13 @@ async function createFromParsed(p, planId, raw) {
       const cents = i === p.inst - 1 ? p.cents - each * (p.inst - 1) : each;
       const id = 't-' + newId(); ids.push(id);
       const o = { kind: p.kind, cents, store: p.store, cat: p.category, method: p.method, plan: planId, ts: when.toISOString() };
+      if (p.cur === 'EUR' || (!p.cur && ui.cur === 'EUR')) o.cur = 'EUR';
       if (grp) Object.assign(o, { grp, n: i + 1, N: p.inst });
       await C.tx.put(id, o);
     }
   } catch (e) { toast('Não consegui salvar agora. Tente de novo.'); return; }
   const pl = planById(planId);
-  const bits = [(p.kind === 'gasto' ? 'Gasto' : 'Receita') + ' de ' + money(p.cents) + (p.inst > 1 ? ' em ' + p.inst + 'x' : ''), p.store || 'sem descrição', p.category, p.method, pl && pl.name].filter(Boolean);
+  const bits = [(p.kind === 'gasto' ? 'Gasto' : 'Receita') + ' de ' + money(p.cents, (p.cur === 'EUR' || (!p.cur && ui.cur === 'EUR')) ? 'EUR' : 'BRL') + (p.inst > 1 ? ' em ' + p.inst + 'x' : ''), p.store || 'sem descrição', p.category, p.method, pl && pl.name].filter(Boolean);
   const wasPlan = ui.month;
   const n = new Date(); ui.month = { y: n.getFullYear(), m: n.getMonth() };
   toast('Registrado: ' + bits.join(' · '), [
@@ -692,7 +698,7 @@ function openSheet(t, pre, msg) {
   const isEdit = !!(t && t.id);
   const src = isEdit ? { kind: t.kind, cents: t.cents, store: t.store, category: t.cat, method: t.method, plan: t.plan, date: new Date(t.ts) } : pre;
   sh.id = isEdit ? t.id : null; sh.orig = isEdit ? t : null; sh.confirmDel = false;
-  $('#shTitle').textContent = isEdit ? 'Editar lançamento' : 'Novo lançamento';
+  $('#shTitle').textContent = (isEdit ? 'Editar lançamento' : 'Novo lançamento') + ((isEdit ? t.cur : ui.cur) === 'EUR' ? ' em euros' : '');
   $('#shDelete').hidden = !isEdit; $('#shDelete').textContent = 'Excluir';
   setKind(src.kind || 'gasto');
   $('#shAmount').value = src.cents ? (src.cents / 100).toFixed(2).replace('.', ',') : '';
@@ -728,6 +734,7 @@ $('#sheet').addEventListener('submit', async e => {
   const cat = titleCase($('#shCat').value.trim()) || 'Outros';
   const resolved = resolveCategory(sh.kind, cat, data.cats).name;
   const o = Object.assign({}, sh.orig ? stripId(sh.orig) : {}, { kind: sh.kind, cents, store: $('#shStore').value.trim(), cat: resolved, method: $('#shMethod').value, plan: $('#shPlan').value, ts: when.toISOString() });
+  if (!sh.orig && ui.cur === 'EUR') o.cur = 'EUR';
   try { await ensureCat(sh.kind, resolved); await C.tx.put(sh.id || 't-' + newId(), o); closeSheet(); toast(sh.id ? 'Lançamento atualizado.' : 'Lançamento salvo.'); }
   catch (err) { m.hidden = false; m.textContent = 'Não consegui salvar agora. Tente de novo.'; }
 });
@@ -744,6 +751,7 @@ window.addEventListener('hashchange', showTab);
 
 $('#prevM').addEventListener('click', () => { const d = new Date(ui.month.y, ui.month.m - 1, 1); ui.month = { y: d.getFullYear(), m: d.getMonth() }; ui.limit = 25; schedule(); });
 $('#nextM').addEventListener('click', () => { const d = new Date(ui.month.y, ui.month.m + 1, 1); ui.month = { y: d.getFullYear(), m: d.getMonth() }; ui.limit = 25; schedule(); });
+$('#curSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.cur = b.dataset.c; ui.limit = 25; schedule(); });
 $('#chartKind').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.chart = b.dataset.k; schedule(); });
 $('#moreBtn').addEventListener('click', () => { ui.limit += 25; schedule(); });
 $('#filterChips').addEventListener('click', e => {
@@ -770,7 +778,7 @@ function renderSelects() {
 function fillCatList() { $('#catsShared').innerHTML = categoryNames(sh.kind, data.cats).map(n => '<option value="' + esc(n) + '">').join(''); }
 
 function monthTx() {
-  return data.tx.filter(t => inMonth(t, ui.month) && (ui.filter === 'all' || t.plan === ui.filter)).sort((a, b) => b.ts.localeCompare(a.ts));
+  return data.tx.filter(t => curOf(t) === ui.cur && inMonth(t, ui.month) && (ui.filter === 'all' || t.plan === ui.filter)).sort((a, b) => b.ts.localeCompare(a.ts));
 }
 function sum(list, kind) { return list.filter(t => t.kind === kind).reduce((s, t) => s + (t.cents || 0), 0); }
 
@@ -780,8 +788,9 @@ function renderHome() {
   $('#filterChips').innerHTML = chips.map(c => '<button class="chip" data-p="' + esc(c.id) + '" aria-pressed="' + (ui.filter === c.id) + '">' + (c.p ? planDot(c.p) : '') + esc(c.name) + '</button>').join('');
   const list = monthTx();
   const inC = sum(list, 'receita'), outC = sum(list, 'gasto'), bal = inC - outC;
-  $('#sumIn').textContent = money(inC); $('#sumOut').textContent = money(outC);
-  const b = $('#sumBal'); b.textContent = (bal < 0 ? '−' : '') + money(Math.abs(bal)); b.style.color = bal < 0 ? 'var(--gasto)' : 'var(--ink)';
+  $('#sumIn').textContent = money(inC, ui.cur); $('#sumOut').textContent = money(outC, ui.cur);
+  $$('#curSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.c === ui.cur)));
+  const b = $('#sumBal'); b.textContent = (bal < 0 ? '−' : '') + money(Math.abs(bal), ui.cur); b.style.color = bal < 0 ? 'var(--gasto)' : 'var(--ink)';
 
   $$('#chartKind button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.k === ui.chart)));
   const by = {};
@@ -789,7 +798,7 @@ function renderHome() {
   const arr = Object.keys(by).map(k => [k, by[k]]).sort((a, b) => b[1] - a[1]);
   const total = arr.reduce((s, x) => s + x[1], 0), max = arr.length ? arr[0][1] : 1;
   $('#bars').innerHTML = arr.length ? arr.map(([k, v]) =>
-    '<div><div class="bar-top"><span>' + esc(k) + ' <span class="muted small">' + Math.round(v / total * 100) + '%</span></span><span class="num">' + money(v) + '</span></div>' +
+    '<div><div class="bar-top"><span>' + esc(k) + ' <span class="muted small">' + Math.round(v / total * 100) + '%</span></span><span class="num">' + money(v, ui.cur) + '</span></div>' +
     '<div class="track"><div class="fill' + (ui.chart === 'receita' ? ' r' : '') + '" style="width:' + Math.max(2, v / max * 100) + '%"></div></div></div>').join('')
     : '<div class="empty">' + (ui.chart === 'gasto' ? 'Nenhum gasto neste período. Escreva ou fale no campo de cima, por exemplo, “gastei 45 reais no mercado no débito”.' : 'Nenhuma receita neste período. Escreva, por exemplo, “recebi 800 de freela no Pix”.') + '</div>';
 
@@ -801,7 +810,7 @@ function renderHome() {
     const inst = t.N ? ' <span class="tag">' + t.n + '/' + t.N + '</span>' : '';
     return '<button class="row" data-id="' + esc(t.id) + '"><div class="row-main"><div class="row-title">' + esc(t.store || (t.kind === 'gasto' ? 'Gasto' : 'Receita')) + inst + '</div>' +
       '<div class="row-meta">' + meta + (pl ? ' · ' + planDot(pl) + ' ' + esc(pl.name) : '') + (future ? ' · futuro' : '') + '</div></div>' +
-      '<span class="num ' + (t.kind === 'gasto' ? 'out' : 'in') + '">' + (t.kind === 'gasto' ? '−' : '+') + money(t.cents) + '</span></button>';
+      '<span class="num ' + (t.kind === 'gasto' ? 'out' : 'in') + '">' + (t.kind === 'gasto' ? '−' : '+') + money(t.cents, t.cur) + '</span></button>';
   }).join('') : '<div class="empty">Nada registrado neste período.</div>';
   $('#moreBtn').hidden = list.length <= ui.limit;
 }
@@ -810,14 +819,14 @@ function renderPlans() {
   $('#plansMonth').textContent = cap(MONTH_FMT.format(new Date(ui.month.y, ui.month.m, 1)));
   const plans = sortedPlans();
   $('#planGrid').innerHTML = plans.length ? plans.map(p => {
-    const all = data.tx.filter(t => t.plan === p.id), mt = all.filter(t => inMonth(t, ui.month));
+    const all = data.tx.filter(t => t.plan === p.id && curOf(t) === ui.cur), mt = all.filter(t => inMonth(t, ui.month));
     const i = sum(mt, 'receita'), o = sum(mt, 'gasto');
     const by = {}; mt.filter(t => t.kind === 'gasto').forEach(t => { by[t.cat] = (by[t.cat] || 0) + t.cents; });
     const top = Object.keys(by).sort((a, b) => by[b] - by[a])[0];
     const armed = confirmPlan === p.id;
     return '<div class="card plan" data-pid="' + esc(p.id) + '"><div class="plan-head">' + planDot(p) + '<h3>' + esc(p.name) + '</h3></div>' +
-      '<div class="plan-nums"><div><span class="eyebrow">Recebido</span><span class="num" style="color:var(--receita)">' + money(i) + '</span></div><div><span class="eyebrow">Gasto</span><span class="num" style="color:var(--gasto)">' + money(o) + '</span></div></div>' +
-      '<div class="muted small">' + (top ? 'Maior gasto: ' + esc(top) + ' (' + money(by[top]) + ')' : 'Sem gastos neste mês') + ' · ' + all.length + ' no total</div>' +
+      '<div class="plan-nums"><div><span class="eyebrow">Recebido</span><span class="num" style="color:var(--receita)">' + money(i, ui.cur) + '</span></div><div><span class="eyebrow">Gasto</span><span class="num" style="color:var(--gasto)">' + money(o, ui.cur) + '</span></div></div>' +
+      '<div class="muted small">' + (top ? 'Maior gasto: ' + esc(top) + ' (' + money(by[top], ui.cur) + ')' : 'Sem gastos neste mês') + ' · ' + all.length + ' no total</div>' +
       '<div class="plan-actions"><button class="btn sm primary" data-act="open">Ver no início</button><button class="btn sm" data-act="rename">Renomear</button><button class="btn sm danger" data-act="del">' + (armed ? 'Confirmar: apagar plano e ' + all.length + ' lançamentos' : 'Excluir') + '</button></div></div>';
   }).join('') : '<div class="card empty">Nenhum plano ainda. Crie o primeiro abaixo.</div>';
 }
@@ -864,7 +873,7 @@ function invoices(count) {
       s = new Date(pd.getFullYear(), pd.getMonth(), pd.getDate() + 1); e = new Date(cd.getFullYear(), cd.getMonth(), cd.getDate() + 1);
       if (due) dueDate = dAt(y, em + (due <= close ? 1 : 0), due);
     }
-    const items = data.tx.filter(t => t.kind === 'gasto' && t.method === 'Crédito' && txDate(t) >= s && txDate(t) < e).sort((a, b) => a.ts.localeCompare(b.ts));
+    const items = data.tx.filter(t => t.kind === 'gasto' && t.method === 'Crédito' && curOf(t) === 'BRL' && txDate(t) >= s && txDate(t) < e).sort((a, b) => a.ts.localeCompare(b.ts));
     out.push({ s, e, last: new Date(e.getFullYear(), e.getMonth(), e.getDate() - 1), dueDate, items, total: sum(items, 'gasto') });
   }
   return out;
@@ -933,10 +942,10 @@ function renderAll() {
 }
 
 /* ---------- extrato do ano (arquivo extrato.json publicado junto com a página) ---------- */
-const EXTRATO_VER = 2;
+const EXTRATO_VER = 3;
 let importing = false, extratoTried = false;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const sameTx = (a, b) => ['kind', 'cents', 'store', 'cat', 'method', 'plan', 'ts', 'n', 'N'].every(k => a[k] === b[k]);
+const sameTx = (a, b) => ['kind', 'cents', 'store', 'cat', 'method', 'plan', 'ts', 'n', 'N', 'cur'].every(k => a[k] === b[k]);
 async function putRetry(c, id, o) {
   for (let tries = 0; ; tries++) {
     try { return await (o ? c.put(id, o) : c.del(id)); }
