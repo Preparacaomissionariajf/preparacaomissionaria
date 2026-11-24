@@ -786,7 +786,7 @@ function renderAll() {
 }
 
 /* ---------- extrato do ano (arquivo extrato.json publicado junto com a página) ---------- */
-const EXTRATO_VER = 4;
+const EXTRATO_VER = 5;
 let importing = false, extratoTried = false;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const sameTx = (a, b) => ['kind', 'cents', 'store', 'cat', 'method', 'plan', 'ts', 'n', 'N', 'cur'].every(k => a[k] === b[k]);
