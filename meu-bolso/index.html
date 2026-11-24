@@ -61,7 +61,7 @@ button{cursor:pointer}
 .live{margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--surface2);font-size:15px;min-height:42px}
 .quick{display:flex;gap:8px;margin-top:14px}
 .quick input{flex:1;min-width:0}
-.field,.quick input,select,input[type=date],input[type=datetime-local],input[type=text],input[type=number],input[inputmode]{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:44px;width:100%}
+.field,.quick input,select,textarea,input[type=date],input[type=datetime-local],input[type=text],input[type=number],input[inputmode]{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:44px;width:100%}
 .quick input{width:auto}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;min-height:44px;font-weight:500}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -182,23 +182,17 @@ button{cursor:pointer}
   <!-- INÍCIO -->
   <section class="tab" id="tab-inicio">
     <div class="card" id="micCard">
-      <div class="mic-row">
-        <button class="mic" id="mic" type="button" aria-label="Falar um lançamento" aria-pressed="false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-        </button>
-        <div class="mic-copy">
-          <h1 id="micTitle">Toque e fale</h1>
-          <p id="micHint">“Gastei 45 reais no mercado no débito”<br>“Recebi 800 de freela no Pix”</p>
-        </div>
+      <div class="mic-copy">
+        <h1>Registrar</h1>
+        <p>Toque no campo e use o microfone do teclado: “gastei 45 reais no mercado no débito” ou “recebi 800 de freela no Pix”.</p>
       </div>
-      <div class="live" id="live" hidden></div>
-      <form class="quick" id="quick" autocomplete="off">
-        <input type="text" id="quickText" placeholder="ou digite: gastei 30 na padaria no pix" aria-label="Lançamento por texto">
+      <form class="quick" id="quick" autocomplete="off" style="margin-top:12px">
+        <input type="text" id="quickText" placeholder="gastei 30 na padaria no pix" aria-label="Lançamento por texto" enterkeyhint="send">
         <button class="btn primary" type="submit">Registrar</button>
       </form>
       <div class="mic-foot">
         <label for="planSel">Registrar em <select id="planSel"></select></label>
-        <button class="link" type="button" id="manualBtn">Lançar manualmente</button>
+        <span style="display:flex;gap:16px;flex-wrap:wrap"><button class="link" type="button" id="manualBtn">Lançar manualmente</button><button class="link" type="button" id="impBtn">Importar extrato</button></span>
       </div>
     </div>
 
@@ -326,6 +320,15 @@ button{cursor:pointer}
   </form>
 </div>
 <datalist id="catsShared"></datalist>
+<div class="overlay" id="impOverlay" hidden>
+  <form class="sheet" id="impForm" autocomplete="off" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+    <h2 id="impTitle">Importar extrato</h2>
+    <p class="small muted" style="margin:0">Cole uma linha por lançamento: <b>data;descrição;valor;categoria;pagamento;plano</b>. Valor negativo é gasto e positivo é receita. Categoria, pagamento e plano são opcionais. Importar de novo a mesma linha não duplica.</p>
+    <textarea id="impText" rows="10" spellcheck="false" placeholder="03/11/2026;Mercado Extra;-187,40;Mercado;Débito;Pessoal&#10;05/11/2026;Salário;4200,00;Salário;Pix;Pessoal" style="font-size:13px;font-family:ui-monospace,Menlo,monospace"></textarea>
+    <p class="small" id="impMsg" style="margin:0" hidden></p>
+    <div class="btns"><button class="btn primary grow" type="submit">Importar</button><button class="btn" type="button" id="impCancel">Fechar</button></div>
+  </form>
+</div>
 
 <div class="toast" id="toast" hidden role="status" aria-live="polite"><span id="toastMsg"></span><span id="toastActs" style="flex:none;min-width:0"></span></div>
 
@@ -571,49 +574,9 @@ async function init() {
       seedIfNeeded(); schedule();
     }, () => { live[name] = true; schedule(); });
   });
-  initVoice();
 }
 
-/* ---------- ouvir e registrar ---------- */
-let dict = null, listening = false, buf = '', silenceT = 0, noLang = false;
-async function initVoice() {
-  dict = await use('dictation');
-  const mic = $('#mic');
-  if (!dict) {
-    mic.disabled = true;
-    $('#micTitle').textContent = 'Voz indisponível aqui';
-    $('#micHint').textContent = 'Este navegador não libera o microfone para a página. Digite o lançamento abaixo, do mesmo jeito que falaria.';
-    return;
-  }
-  dict.onPartial(e => { showLive((buf + ' ' + e.text).trim()); armSilence(); });
-  dict.onFinal(e => { buf += e.text; showLive(buf.trim()); armSilence(); });
-  dict.onState(e => {
-    listening = e.state === 'listening' || e.state === 'starting';
-    mic.classList.toggle('on', listening);
-    mic.setAttribute('aria-pressed', String(listening));
-    $('#micTitle').textContent = listening ? 'Ouvindo…' : 'Toque e fale';
-    if (e.state === 'idle') { clearTimeout(silenceT); finishVoice(); }
-  });
-  mic.addEventListener('click', () => {
-    if (listening) { stopVoice(); return; }
-    buf = ''; showLive('');
-    dict.start(noLang ? undefined : { language: 'pt-BR' }).catch(err => {
-      if (err && err.code === 'unavailable' && !noLang) { noLang = true; toast('Toque de novo no microfone.'); }
-      else if (err && err.code === 'not_granted') toast('Microfone bloqueado. Libere em Permissões ou digite abaixo.');
-      else if (err && err.code !== 'stopped' && err.code !== 'dismissed') toast('Não consegui abrir o microfone. Tente de novo ou digite.');
-    });
-  });
-}
-function showLive(t) { const el = $('#live'); el.hidden = !t && !listening; el.textContent = t || 'Pode falar…'; }
-function armSilence() { clearTimeout(silenceT); silenceT = setTimeout(stopVoice, 2600); }
-async function stopVoice() { clearTimeout(silenceT); try { await dict.stop(); } catch (e) {} finishVoice(); }
-function finishVoice() {
-  const text = buf.trim(); buf = '';
-  if (!text) { if (!listening) $('#live').hidden = true; return; }
-  $('#live').hidden = false; $('#live').textContent = '“' + text + '”';
-  handleText(text);
-}
-
+/* ---------- registrar ---------- */
 function regPlanId() {
   const sel = $('#planSel').value;
   return sel || (sortedPlans()[0] && sortedPlans()[0].id) || '';
@@ -667,6 +630,47 @@ $('#quick').addEventListener('submit', e => {
 });
 $('#manualBtn').addEventListener('click', () => openSheet(null, { kind: 'gasto', plan: regPlanId(), date: new Date(), method: '' }));
 
+
+/* ---------- importar extrato ---------- */
+const hash = str => { let h = 5381; for (const c of str) h = ((h * 33) ^ c.charCodeAt(0)) | 0; return (h >>> 0).toString(36); };
+$('#impBtn').addEventListener('click', () => { $('#impMsg').hidden = true; $('#impOverlay').hidden = false; setTimeout(() => $('#impText').focus(), 30); });
+$('#impCancel').addEventListener('click', () => { $('#impOverlay').hidden = true; });
+$('#impOverlay').addEventListener('mousedown', e => { if (e.target.id === 'impOverlay') $('#impOverlay').hidden = true; });
+$('#impForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('#impMsg'), btn = $('#impForm button[type=submit]');
+  const lines = $('#impText').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let ok = 0; const bad = []; let last = null;
+  btn.disabled = true; msg.hidden = false; msg.style.color = 'var(--muted)'; msg.textContent = 'Importando…';
+  try {
+    for (const line of lines) {
+      const f = line.split(/;|\t/).map(x => x.trim());
+      if (/^data$/i.test(f[0])) continue;
+      let d = null, m;
+      if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?$/.exec(f[0] || ''))) d = new Date(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0);
+      else if ((m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/.exec(f[0] || ''))) d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0);
+      const rawV = (f[2] || '').replace(/^r\$\s*/i, '').replace(/\s/g, '');
+      const neg = /^-|^\(/.test(rawV) || /-$/.test(rawV), clean = rawV.replace(/^[-+(]+|[-)]+$/g, '');
+      const cents = /^[\d.,]+$/.test(clean) ? Math.round(numPt(clean) * 100) : 0;
+      if (!d || isNaN(d) || !cents || !f[1]) { bad.push(line); continue; }
+      const kind = neg ? 'gasto' : 'receita';
+      const store = f[1];
+      const cat = f[3] ? resolveCategory(kind, f[3], data.cats).name : inferCategory(kind, store, data.cats);
+      const mt = METHODS.find(x => fold(x) === fold(f[4] || '')) || '';
+      const pl = data.plans.find(p => fold(p.name) === fold(f[5] || ''));
+      await ensureCat(kind, cat);
+      await C.tx.put('i-' + hash(fold(line).replace(/\s+/g, ' ')), { kind, cents, store, cat, method: mt, plan: pl ? pl.id : regPlanId(), ts: d.toISOString() });
+      ok++; if (!last || d > last) last = d;
+    }
+  } catch (err) { msg.style.color = 'var(--gasto)'; msg.textContent = 'Parei no meio: não consegui salvar. Tente de novo, o que já entrou não duplica.'; btn.disabled = false; return; }
+  btn.disabled = false;
+  if (last) { ui.month = { y: last.getFullYear(), m: last.getMonth() }; ui.limit = 25; }
+  msg.style.color = bad.length ? 'var(--warn)' : 'var(--receita)';
+  msg.textContent = ok + (ok === 1 ? ' lançamento importado' : ' lançamentos importados') + (bad.length ? '. Ignorei ' + bad.length + ' linha(s) sem data, valor ou descrição: ' + bad.slice(0, 3).join(' | ') : '.');
+  if (ok && !bad.length) { $('#impText').value = ''; }
+  schedule();
+});
+
 /* ---------- aviso ---------- */
 let toastT = 0;
 function toast(msg, acts, ms) {
@@ -705,7 +709,7 @@ function closeSheet() { $('#overlay').hidden = true; }
 $('#shKind').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setKind(b.dataset.k); });
 $('#shCancel').addEventListener('click', closeSheet);
 $('#overlay').addEventListener('mousedown', e => { if (e.target.id === 'overlay') closeSheet(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#overlay').hidden) closeSheet(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#overlay').hidden) closeSheet(); $('#impOverlay').hidden = true; } });
 $('#shDelete').addEventListener('click', async () => {
   if (!sh.confirmDel) { sh.confirmDel = true; $('#shDelete').textContent = 'Confirmar exclusão'; return; }
   const old = sh.orig; closeSheet();
@@ -787,7 +791,7 @@ function renderHome() {
   $('#bars').innerHTML = arr.length ? arr.map(([k, v]) =>
     '<div><div class="bar-top"><span>' + esc(k) + ' <span class="muted small">' + Math.round(v / total * 100) + '%</span></span><span class="num">' + money(v) + '</span></div>' +
     '<div class="track"><div class="fill' + (ui.chart === 'receita' ? ' r' : '') + '" style="width:' + Math.max(2, v / max * 100) + '%"></div></div></div>').join('')
-    : '<div class="empty">' + (ui.chart === 'gasto' ? 'Nenhum gasto neste período. Toque no microfone e diga, por exemplo, “gastei 45 reais no mercado no débito”.' : 'Nenhuma receita neste período. Diga, por exemplo, “recebi 800 de freela no Pix”.') + '</div>';
+    : '<div class="empty">' + (ui.chart === 'gasto' ? 'Nenhum gasto neste período. Escreva ou fale no campo de cima, por exemplo, “gastei 45 reais no mercado no débito”.' : 'Nenhuma receita neste período. Escreva, por exemplo, “recebi 800 de freela no Pix”.') + '</div>';
 
   const shown = list.slice(0, ui.limit);
   $('#listCount').textContent = list.length ? list.length + (list.length === 1 ? ' lançamento' : ' lançamentos') : '';
